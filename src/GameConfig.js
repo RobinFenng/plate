@@ -3,6 +3,8 @@
  */
 var CAT = {};
 CAT.SPEED = 200;
+CAT.LIVES = 10;
+
 CAT.random = function (x, y) {
     return parseInt(Math.random() * (y - x) + x);
 };

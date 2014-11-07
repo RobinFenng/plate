@@ -12,6 +12,9 @@ var MainLayer = cc.Layer.extend({
     ground:null,
     ball:null,
     ballShape :null,
+    score:0,
+    livesLabel:null,
+    scoreLabel:null,
     ctor:function(){
         this._super();
         this.space = new cp.Space();
@@ -49,40 +52,81 @@ var MainLayer = cc.Layer.extend({
         this.space.addCollisionHandler(SpriteTag.BALL,SpriteTag.CAT,this.collisionTouchWall.bind(this),null,null,null);
         this.space.addCollisionHandler(SpriteTag.BALL,SpriteTag.WALL_BUTTOM,this.collisionTouchWall.bind(this),null,null,null);
 
+        this.addTouch();
 
-        cc.eventManager.addListener({
-            event:cc.EventListener.TOUCH_ALL_AT_ONCE,
-            onTouchesBegan:function(touches,event){
-                var target = event.getCurrentTarget();
-                target.preventTouch(touches[0]);
+    },
+    addTouch: function () {
+        var self = this;
+        self.listener = cc.EventListener.create({
+            event: cc.EventListener.TOUCH_ONE_BY_ONE,
+            swallowTouches: true,
+            startPosY: 0,
+            startPosX: 0,
+            onTouchBegan: function (touch, event) {
+                this.startPosY = touch.getLocation().y;
+                this.startPosX = touch.getLocation().x;
+                return true;
+            },
+            onTouchMoved: function (touch, event) {
+
+            },
+            onTouchEnded: function (touch, event) {
+                    var deltaY = touch.getLocation().y - this.startPosY;
+                    var deltaX = touch.getLocation().x - this.startPosY;
+                    var target = event.getCurrentTarget();
+                    target.preventTouch(deltaX,deltaY);
+            },
+            onTouchCancelled: function (touch, event) {
+
             }
-        },this);
-
-
+        });
+        cc.eventManager.addListener(self.listener, self);
     },
     collisionTouchWall:function(arbiter, space){
 
-        this.space.addPostStepCallback(function () {
+        var shapes = arbiter.getShapes();
+        var shapeA =  shapes[0];
+        var shapeB =  shapes[1];
+
+        var collisionTypeA =  shapeA.collision_type;
+        var collisionTypeB =  shapeB.collision_type;
+
+        if(collisionTypeB==SpriteTag.CAT){
+
+          this.score ++;
+            this.scoreLabel.setString("Score："+this.score);
+        }else if(collisionTypeB==SpriteTag.WALL_BUTTOM){
+            CAT.LIVES --;
+            this.livesLabel.setString("Lives："+CAT.LIVES );
+            if(CAT.LIVES<0){
+                this.gameOver();
+            }
+        }
+            this.space.addPostStepCallback(function () {
+            var x = CAT.random(this.winSize.width/5,this.winSize.width/5*4);
+             var action = cc.moveTo(0.5,cc.p(x,this.goddess.y));
+            this.goddess.runAction(action);
             this.ball.removeFromParent(true);
             this.space.removeShape(this.ballShape);
-
             this.initBall();
 
         }.bind(this));
         return true;
 
     },
+    gameOver:function(){
 
-    preventTouch:function(event){
+        var scene = new cc.Scene();
+        var layer = new GameOverLayer(this.score);
+        scene.addChild(layer);
+        cc.director.runScene(new cc.TransitionFade(1.2, scene));
 
-        var catPos = this.cat.getPosition();
-        var location = event.getLocation();
-        var x = catPos.x - location.x;
-        var y = catPos.y - location.y;
-        this.doForceBird(x/this.winSize.width*2+y/this.winSize.height,1);
+    },
+    preventTouch:function(x,y){
+        this.doForceBird(x/this.winSize.width,y/this.winSize.height);
     },
     doForceBird:function(x,y){
-        var x1 = x*CAT.SPEED *Math.cos(45*Math.PI/180)*2.5;
+        var x1  = CAT.SPEED * 2.5*x;
         var y =  CAT.SPEED * 2.5*y;
         this.cat.getBody().setVel(cp.v(0,0));
         this.cat.getBody().applyImpulse(cp.v(x1,y),cp.v(0,30));
@@ -92,11 +136,29 @@ var MainLayer = cc.Layer.extend({
         this.space.step(1/60.0);
     },
     init:function(){
+        this.initLives();
+        this.initScore();
         this.initGround();
         this.initPhysics();
         this.initCat();
         this.initGoddess();
         this.initBall();
+    },
+    initLives:function(){
+        this.livesLabel =  new cc.LabelTTF("Lives："+CAT.LIVES+"","Arial Black",25);
+        this.livesLabel.x =  65;
+        this.livesLabel.y = this.winSize.height - 20;
+        this.livesLabel.color = cc.color(0,0,0);
+        this.addChild(this.livesLabel);
+        this.livesLabel.setVisible(true);
+    },
+    initScore:function(){
+        this.scoreLabel =  new cc.LabelTTF("Score："+this.score+"","Arial Black",25);
+        this.scoreLabel.x =  this.winSize.width-65;
+        this.scoreLabel.y = this.winSize.height - 20;
+        this.scoreLabel.color = cc.color(0,0,0);
+        this.addChild(this.scoreLabel);
+        this.scoreLabel.setVisible(true);
     },
     initBall:function(){
 
@@ -116,8 +178,9 @@ var MainLayer = cc.Layer.extend({
         this.ball.setBody(body);
         this.addChild(this.ball);
 
-        var speed  = 100;
-        var x = speed*Math.cos(45*Math.PI/180);
+        var speed  = 50;
+        var d = CAT.random(0,180);
+        var x = speed*Math.cos(d*Math.PI/180);
         var y =  false*speed * Math.sin(60*Math.PI/180);
         this.ball.getBody().setVel(cp.v(0,0));
         this.ball.getBody().applyImpulse(cp.v(x,y),cp.v(0,0));
@@ -169,7 +232,7 @@ var MainLayer = cc.Layer.extend({
 
         this.cat =  new cc.PhysicsSprite("#jqm_3_0");
         var mass = 1;
-        var body = new cp.Body(mass,cp.momentForBox(mass, this.cat.width,this.cat.height));
+        var body = new cp.Body(mass,cp.momentForBox(10, this.cat.width,this.cat.height));
         body.setPos(cc.p(this.winSize.width/2,this.winSize.height/2));
         this.space.addBody(body);
         var shape = new cp.BoxShape(body,this.cat.width,this.cat.height);
